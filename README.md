@@ -1,68 +1,58 @@
-# terraform-aws-bastion-nat
+# terraform-aws-vpc-ssm
 
-A single-region AWS network — VPC, public/private subnets, bastion-as-NAT, and a private web server — provisioned entirely with Terraform. No console, no manual resource creation.
+A single-region AWS network — VPC, public/private subnets, managed NAT Gateway, and a private web server — provisioned entirely with Terraform, with remote state and CI baked in.
 
-This is a rebuild of an architecture I first stood up by hand with the AWS CLI ([aws-infra-cli](https://github.com/shaurya-security/aws-infra-cli)). Same topology, this time expressed declaratively: dependency order is enforced by the graph instead of remembered by me.
+This is v2 of a rebuild that started as a hand-run AWS CLI lab ([aws-infra-cli](https://github.com/shaurya-security/aws-infra-cli)), then became a first Terraform pass using a bastion-as-NAT instance ([terraform-aws-bastion-nat](https://github.com/shaurya-security/terraform-aws-bastion-nat)). This version drops the SSH bastion pattern entirely in favor of a managed NAT Gateway for egress and AWS SSM Session Manager for access — no open SSH ports, no key pairs to manage.
+
+---
+
+## What changed from v1
+
+| | v1 (`terraform-aws-bastion-nat`) | v2 (`terraform-aws-vpc-ssm`) |
+|---|---|---|
+| Outbound NAT | Bastion EC2 doing `iptables MASQUERADE` | Managed `aws_nat_gateway` |
+| Instance access | SSH jump through the bastion (`bastion_ssh.sh` / `web_ssh.sh`) | AWS SSM Session Manager (IAM role + `AmazonSSMManagedInstanceCore`) |
+| State | Local `terraform.tfstate` | S3 backend (`shaurya-terraform-state-2026`) with native `use_lockfile` locking — no DynamoDB table needed |
+| Security | Bastion SG open to SSH from anywhere | No inbound rules on either SG — SSM works entirely over outbound HTTPS |
+| Hardening | — | IMDSv2 enforced (`http_tokens = required`), encrypted root volumes |
+| CI | — | GitHub Actions: `terraform fmt`, `terraform validate`, Checkov scan |
+| Policy-as-code | — | `.checkov.yaml` with explicit, commented skip list |
+| Bootstrap | — | Separate `terraform-bootstrap/` config to stand up the S3 state bucket |
 
 ---
 
 ## Architecture
 
-![Architecture diagram](screenshots/architecture_diagram.png)
-
 - VPC `10.0.0.0/16` in `ap-south-1`
-- Public subnet `10.0.1.0/24` (`ap-south-1a`) → Bastion EC2, public IP, doubles as a NAT instance
-- Private subnet `10.0.2.0/24` (`ap-south-1b`) → Web server EC2, no public IP, NGINX
-- Internet Gateway on the public route table; private route table's default route points at the bastion's ENI
-- Security groups chained: SSH reaches the bastion from anywhere, the web server only accepts SSH from the bastion's SG
-- No managed NAT Gateway — the bastion does the NAT work itself via `iptables MASQUERADE`
-
----
-
-## Features
-
-- **Fully declarative lifecycle** — 13 resources, one `terraform apply` / `terraform destroy`, no drift between runs
-- **Dynamic AMI resolution** — `data.aws_ami` filters for the latest Amazon Linux 2023 image at apply time instead of a hardcoded, decaying AMI ID
-- **Bastion-as-NAT** — `source_dest_check` disabled on the bastion, `iptables` MASQUERADE rule injected via `user_data`, rules persisted across reboot with a hand-written systemd unit (AL2023 dropped the `iptables-services` package this used to rely on)
-- **Centralized naming** — all resource names derive from one `owner` local, so a naming-convention change is a one-line edit
-- **Zero-copy-paste access** — `bastion_ssh.sh` and `web_ssh.sh` read `terraform output` directly and jump-host into the private instance with agent forwarding
+- Public subnet `10.0.1.0/24` (`ap-south-1a`) → NAT Gateway + Elastic IP
+- Private subnet `10.0.2.0/24` (`ap-south-1b`) → web server EC2, no public IP, NGINX
+- Internet Gateway on the public route table; private route table's default route points at the NAT Gateway
+- Both EC2 instances carry an IAM instance profile scoped to `AmazonSSMManagedInstanceCore` — reachable via `aws ssm start-session`, no bastion, no SSH key
+- Security groups allow all egress and currently define no ingress rules at all — SSM doesn't need any
 
 ---
 
 ## Project structure
 
 ```
-terraform-lab/
-├── main.tf          # provider + required_providers
-├── variables.tf     # CIDR ranges, owner prefix
-├── locals.tf         # naming convention (owner → resource names)
-├── data.tf           # latest Amazon Linux 2023 AMI lookup
-├── network.tf        # VPC, subnets, IGW, route tables, security groups, NAT route
-├── compute.tf         # bastion + web server instances, user_data
-├── output.tf         # bastion_public_ip, webserver_private_ip
-├── bastion_ssh.sh    # direct SSH to the bastion
-└── web_ssh.sh        # SSH jump through the bastion to the private web server
+.
+├── terraform-lab/              # the network + compute stack
+│   ├── main.tf                 # provider + required_providers
+│   ├── backend.tf              # S3 remote state, native locking
+│   ├── variables.tf            # CIDR ranges, owner prefix
+│   ├── locals.tf                # naming convention (owner → resource names)
+│   ├── data.tf                  # latest Amazon Linux 2023 AMI lookup
+│   ├── network.tf               # VPC, subnets, IGW, route tables, SGs, NAT Gateway
+│   ├── compute.tf                # bastion + web server instances, IMDSv2, encrypted volumes
+│   ├── iam.tf                    # SSM instance role/profile
+│   ├── output.tf                 # IPs and instance IDs
+│   ├── userdata/                 # common.sh (tooling + SSM agent), bastion.sh, webserver.sh
+│   ├── ssm_bastion.sh             # zero-copy-paste SSM session into the bastion
+│   ├── ssm_web.sh                 # zero-copy-paste SSM session into the web server
+│   ├── .checkov.yaml              # commented Checkov skip list
+│   └── .github/workflows/terraform.yml   # fmt + validate + Checkov on push/PR
+└── terraform-bootstrap/         # one-time setup: S3 state bucket (versioned, encrypted, public access blocked)
 ```
-
----
-
-## Screenshots
-
-**`terraform apply`** — 13 resources created, outputs printed:
-
-![terraform apply](screenshots/terraform_apply.png)
-
-**`terraform graph`** — dependency order enforced by Terraform, not memory:
-
-![terraform graph](screenshots/terraform_graph.png)
-
-**SSH jump + NAT proof** — from the private web server, with no public IP, straight through the bastion:
-
-![SSH jump and NAT proof](screenshots/terraform_ssh_jump_to_webserver_and_ping_curl_success_on_google.png)
-
-**`terraform destroy`** — full teardown, 13 resources removed, correct reverse order:
-
-![terraform destroy](screenshots/terraform_destroy.png)
 
 ---
 
@@ -71,41 +61,61 @@ terraform-lab/
 **Prerequisites**
 - Terraform >= 1.5, AWS provider `~> 6.0`
 - AWS CLI v2 configured with credentials for `ap-south-1`
-- An EC2 key pair named `shaurya-bastion-key` already created in that region (or edit `key_name` in `compute.tf`)
+- Session Manager plugin for the AWS CLI (for `aws ssm start-session`)
+
+**1. Bootstrap remote state (one-time, per AWS account)**
 
 ```bash
-git clone https://github.com/shaurya-security/terraform-aws-bastion-nat.git
-cd terraform-lab
+cd terraform-bootstrap
+terraform init
+terraform apply
+```
 
+**2. Deploy the network + compute stack**
+
+```bash
+cd terraform-lab
 terraform init
 terraform plan
 terraform apply
+```
 
-# jump into the private web server through the bastion
-chmod +x bastion_ssh.sh web_ssh.sh
-./web_ssh.sh
+**3. Connect — no SSH, no bastion**
 
-# tear it all down
+```bash
+chmod +x ssm_bastion.sh ssm_web.sh
+./ssm_bastion.sh   # or ./ssm_web.sh
+```
+
+Both scripts read the instance ID straight from `terraform output`, same zero-copy-paste pattern v1's `bastion_ssh.sh` used, just over SSM instead of an SSH jump.
+
+**4. Tear down**
+
+```bash
 terraform destroy
 ```
 
 ---
 
-## Lessons learned
+## Quality gates
 
-- **AL2023 dropped `iptables-services`.** The package this project originally leaned on for persisting iptables rules across reboot doesn't exist on Amazon Linux 2023. Fixed by writing rules with `iptables-save` and restoring them at boot through a custom `oneshot` systemd unit instead.
-- **`source_dest_check` isn't optional for a NAT instance.** Left at its default (`true`), AWS drops any traffic the bastion is forwarding rather than originating — MASQUERADE traffic silently disappears until this is turned off explicitly.
-- **The route to a NAT instance is a live dependency, not a static value.** Pointing the private route table at `aws_instance.bastion.primary_network_interface_id` means Terraform won't create that route until the bastion exists — the graph makes an ordering constraint that was easy to get wrong by hand impossible to skip.
+The project is validated through GitHub Actions:
+- `terraform fmt`
+- `terraform validate`
+- Checkov
+
+Current Checkov status:
+- ✅ 38 checks passed
+- ⚠️ 2 checks intentionally left unresolved (`CKV_AWS_126`) because EC2 Detailed Monitoring is a cost optimization rather than a security requirement.
 
 ---
 
-## Future improvements
+## Known gaps / next up
 
-- [ ] Variablize `key_name` and AMI filters instead of hardcoding
-- [ ] Remote state (S3 backend + DynamoDB locking)
-- [ ] Toggle between bastion-as-NAT and a managed NAT Gateway via a variable
-- [ ] CloudTrail + VPC Flow Logs feeding into the existing Wazuh detection pipeline
-- [ ] Checkov scan in CI
+- [ ] Wire `bastion.sh` and `webserver.sh` into their respective instances' `user_data` (both currently only run `common.sh`)
+- [ ] Add ingress rules scoped to what each tier actually needs (currently egress-only SGs)
+- [ ] VPC Flow Logs feeding into the existing Wazuh detection pipeline (currently skipped in `.checkov.yaml` as `CKV2_AWS_11`)
+- [ ] Toggle between NAT Gateway and the v1 bastion-as-NAT pattern via a variable, for cost comparison
 - [ ] Split `network.tf` / `compute.tf` into reusable modules
 
 ---

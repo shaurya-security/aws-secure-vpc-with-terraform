@@ -70,26 +70,12 @@ resource "aws_route_table_association" "private_association" {
 
 resource "aws_security_group" "bastion_sg" {
   name        = local.bastion_sg_name
-  description = "SSH access + NAT forwarding"
+  description = "Casual instance"
   vpc_id      = aws_vpc.main.id
 
-  ingress {
-    description = "SSH from admin IP only"
-    from_port   = 22
-    to_port     = 22
-    protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
-
-  ingress {
-    description = "Forwarded traffic from private subnet (NAT)"
-    from_port   = 0
-    to_port     = 0
-    protocol    = "-1"
-    cidr_blocks = [var.private_subnet_cidr]
-  }
-
   egress {
+  description = "Allow all outbound traffic"
+
     from_port   = 0
     to_port     = 0
     protocol    = "-1"
@@ -101,24 +87,34 @@ resource "aws_security_group" "webserver_sg" {
   name        = local.webserver_sg_name
   description = "SSH access"
   vpc_id      = aws_vpc.main.id
-  ingress {
-    from_port       = 22
-    to_port         = 22
-    protocol        = "tcp"
-    security_groups = [aws_security_group.bastion_sg.id]
-  }
 
   egress {
+  description = "Allow all outbound traffic"
+
     from_port   = 0
     to_port     = 0
     protocol    = "-1"
     cidr_blocks = ["0.0.0.0/0"]
   }
 }
+
+resource "aws_eip" "nat" {
+  domain = "vpc"
+  tags   = { Name = "nat-eip" }
+}
+
+resource "aws_nat_gateway" "main" {
+
+  allocation_id = aws_eip.nat.id
+  subnet_id     = aws_subnet.public.id
+  depends_on    = [aws_internet_gateway.igw]
+  tags          = { Name = "main-nat-gateway" }
+}
+
 resource "aws_route" "private_nat" {
 
   route_table_id         = aws_route_table.private_rtb.id
   destination_cidr_block = "0.0.0.0/0"
 
-  network_interface_id = aws_instance.bastion.primary_network_interface_id
+  nat_gateway_id = aws_nat_gateway.main.id
 }
