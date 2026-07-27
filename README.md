@@ -2,7 +2,7 @@
 
 A single-region AWS network — VPC, public/private subnets, managed NAT Gateway, and a private web server — provisioned entirely with Terraform, with remote state and CI baked in.
 
-This is v2 of a rebuild that started as a hand-run AWS CLI lab ([aws-infra-cli](https://github.com/shaurya-security/aws-infra-cli)), then became a first Terraform pass using a bastion-as-NAT instance ([terraform-aws-bastion-nat](https://github.com/shaurya-security/terraform-aws-bastion-nat)). This version drops the SSH bastion pattern entirely in favor of a managed NAT Gateway for egress and AWS SSM Session Manager for access — no open SSH ports, no key pairs to manage.
+This is v2 of a rebuild that started as a hand-run AWS CLI lab ([aws-infra-cli](https://github.com/shaurya-security/aws-infra-cli)), then became a first Terraform pass using a bastion-as-NAT instance ([terraform-aws-bastion-nat](https://github.com/shaurya-security/terraform-aws-bastion-nat/tree/v1.0.0)). This version drops the SSH bastion pattern entirely in favor of a managed NAT Gateway for egress and AWS SSM Session Manager for access — no open SSH ports, no key pairs to manage.
 
 ---
 
