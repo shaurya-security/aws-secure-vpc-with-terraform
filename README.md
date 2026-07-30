@@ -206,9 +206,7 @@ Every push and pull request automatically executes:
 
 ## GitHub Actions Scan
 
-<p align="center">
-  <img src="assets/github_actions_scan_result.png" width="1000" alt="GitHub Actions Scan">
-</p>
+
 
 ---
 
