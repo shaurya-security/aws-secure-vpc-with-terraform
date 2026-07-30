@@ -1,118 +1,191 @@
 # AWS Secure VPC with Terraform
 
-#### A single-region AWS network—VPC, public/private subnets, a managed NAT Gateway, and a private web server—fully provisioned with Terraform, with remote state and integrated GitHub Actions CI.
-
-- This project is the second iteration of a lab that began as a hand-built AWS CLI environment ([aws-infra-cli](https://github.com/shaurya-security/aws-infra-cli)).
-  
-- It then evolved into a Terraform deployment using a bastion-as-NAT instance ([terraform-aws-bastion-nat](https://github.com/shaurya-security/terraform-aws-bastion-nat/tree/v1.0.0)).
-  
-- This version replaces the bastion-as-NAT pattern with a managed NAT Gateway and replaces SSH administration with AWS Systems Manager Session Manager—no SSH keys or inbound SSH access required.
-  
-> **Note:** Although the environment still includes a bastion EC2 instance, it is no longer used for NAT or SSH access. It serves only as an SSM-managed administration host and demonstration instance.
+#### A production-style AWS networking lab built with Terraform featuring remote state, a managed NAT Gateway, AWS Systems Manager (SSM), GitHub Actions CI, and Checkov security scanning.
 
 ---
 
-## What changed from v1
+## Overview
 
-| | v1 (`terraform-aws-bastion-nat`) | v2 (`aws-secure-vpc-with-terraform`) |
-|---|---|---|
-| Outbound NAT | Bastion EC2 using `iptables MASQUERADE` | Managed `aws_nat_gateway` |
-| Instance access | SSH jump host (`bastion_ssh.sh` / `web_ssh.sh`) | AWS Systems Manager Session Manager (`ssm_bastion.sh` / `ssm_web.sh`) |
-| State | Local `terraform.tfstate` | S3 backend with native `use_lockfile` locking |
-| Security | SSH exposed on the bastion | No inbound security group rules; SSM works over outbound HTTPS |
-| Hardening | — | IMDSv2 enforced (`http_tokens = required`), encrypted root volumes |
-| CI | — | GitHub Actions (`terraform fmt`, `terraform validate`, Checkov) |
-| Policy-as-Code | — | `.checkov.yaml` with documented skip list |
-| Bootstrap | — | Separate `terraform-bootstrap/` project for the remote state bucket |
+This project provisions a secure, single-region AWS environment using **Terraform**.
 
----
+It demonstrates modern AWS infrastructure practices by combining **Infrastructure as Code**, **private networking**, **AWS Systems Manager (SSM)**, **remote Terraform state**, and **automated security validation** through GitHub Actions and Checkov.
 
-## Architecture
+This repository is the second major iteration of a cloud infrastructure lab that evolved through multiple implementations:
 
-- VPC `10.0.0.0/16` in `ap-south-1`
-- Public subnet `10.0.1.0/24` (`ap-south-1a`) hosting:
-  - NAT Gateway + Elastic IP
-  - Bastion EC2 (SSM-managed only)
-- Private subnet `10.0.2.0/24` (`ap-south-1b`) hosting:
-  - Web server EC2 (NGINX, no public IP)
-- Internet Gateway attached to the VPC
-- Public and private route tables with the private subnet routing Internet-bound traffic through the NAT Gateway
-- Both EC2 instances use IAM instance profiles with `AmazonSSMManagedInstanceCore`, enabling administration through AWS Systems Manager instead of SSH
-- Security groups currently allow all outbound traffic and intentionally define no inbound rules
+- **v0:** AWS CLI provisioning → [aws-infra-cli](https://github.com/shaurya-security/aws-infra-cli)
+- **v1:** Terraform with Bastion-as-NAT → [terraform-aws-bastion-nat](https://github.com/shaurya-security/terraform-aws-bastion-nat/tree/v1.0.0)
+- **v2 (current):** Managed NAT Gateway + AWS Systems Manager (SSM)
+
+Unlike previous versions, this implementation eliminates SSH administration entirely. Both EC2 instances are managed through **AWS Systems Manager Session Manager**, requiring **no SSH keys** and **no inbound security group rules**.
+
+> **Note**
+>
+> The Bastion EC2 instance is retained solely as an SSM-managed administration host and demonstration instance. It no longer functions as a NAT instance or SSH jump host.
 
 ---
 
-## Project structure
+# Highlights
+
+- ✅ Production-style VPC architecture
+- ✅ Managed NAT Gateway
+- ✅ Public & Private Subnets
+- ✅ AWS Systems Manager (SSM)
+- ✅ No SSH keys required
+- ✅ No inbound Security Group rules
+- ✅ IMDSv2 enforced
+- ✅ Encrypted EBS root volumes
+- ✅ Remote Terraform State (S3)
+- ✅ Native Terraform State Locking
+- ✅ GitHub Actions CI
+- ✅ Checkov Security Scanning
+
+---
+
+# What's New in v2
+
+| Feature | v1 | v2 |
+|----------|----|----|
+| NAT | Bastion EC2 (`iptables`) | Managed NAT Gateway |
+| Administration | SSH Jump Host | AWS Systems Manager |
+| State | Local | S3 Backend |
+| Locking | None | Native `use_lockfile` |
+| Security | SSH Inbound | No Inbound Rules |
+| Root Volume | Default | Encrypted |
+| IMDS | Optional | IMDSv2 Required |
+| CI/CD | None | GitHub Actions |
+| Security Scanning | None | Checkov |
+
+---
+
+# Architecture
+
+## Infrastructure
+
+- **Region:** ap-south-1
+- **VPC:** `10.0.0.0/16`
+
+### Public Subnet (`10.0.1.0/24`)
+
+- NAT Gateway
+- Elastic IP
+- Bastion EC2 (SSM-managed)
+
+### Private Subnet (`10.0.2.0/24`)
+
+- NGINX Web Server
+- No Public IP
+
+### Networking
+
+- Internet Gateway
+- Public Route Table
+- Private Route Table
+- Private subnet routes Internet traffic through the NAT Gateway
+
+### Administration
+
+- IAM Instance Profiles
+- AmazonSSMManagedInstanceCore
+- AWS Systems Manager Session Manager
+
+### Security
+
+- No inbound Security Group rules
+- Allow all outbound traffic
+- IMDSv2 required
+- Encrypted root volumes
+
+<p align="center">
+  <img src="assets/aws_secure_vpc_arch_diagram.png" alt="AWS Secure VPC Architecture" width="1000">
+</p>
+
+---
+
+# Repository Structure
 
 ```text
 .
-├── terraform-lab/
-│   ├── main.tf                  # Provider configuration
-│   ├── backend.tf               # S3 remote state + native locking
-│   ├── variables.tf             # CIDR ranges and configurable values
-│   ├── locals.tf                # Resource naming
-│   ├── data.tf                  # Latest Amazon Linux 2023 AMI lookup
-│   ├── network.tf               # VPC, subnets, IGW, route tables, NAT Gateway, SGs
-│   ├── compute.tf               # EC2 instances, IMDSv2, encrypted root volumes
-│   ├── iam.tf                   # SSM IAM role and instance profile
-│   ├── output.tf                # Terraform outputs
-│   ├── userdata/
-│   │   ├── common.sh
-│   │   ├── bastion.sh
-│   │   └── webserver.sh
-│   ├── ssm_bastion.sh           # Start an SSM session with the bastion
-│   ├── ssm_web.sh               # Start an SSM session with the web server
-│   ├── .checkov.yaml            # Checkov configuration
-│   └── .github/workflows/
-│       └── terraform.yml        # fmt + validate + Checkov
+├── terraform-bootstrap/
+│   ├── backend.tf
+│   ├── provider.tf
+│   └── s3.tf
 │
-└── terraform-bootstrap/
-    ├── provider.tf
+└── terraform-lab/
     ├── backend.tf
-    └── s3.tf                    # One-time bootstrap for the remote state bucket
+    ├── compute.tf
+    ├── data.tf
+    ├── iam.tf
+    ├── locals.tf
+    ├── main.tf
+    ├── network.tf
+    ├── output.tf
+    ├── variables.tf
+    ├── userdata/
+    ├── ssm_bastion.sh
+    ├── ssm_web.sh
+    ├── .checkov.yaml
+    └── .github/workflows/
+        └── terraform.yml
 ```
 
 ---
 
-## Deployment
+# Deployment
 
-### Prerequisites
+## Prerequisites
 
 - Terraform >= 1.5
-- AWS Provider `~> 6.0`
-- AWS CLI v2 configured for `ap-south-1`
+- AWS Provider ~> 6.0
+- AWS CLI v2
 - AWS Session Manager Plugin
 
-### 1. Bootstrap the remote state (one-time)
+---
+
+## 1. Bootstrap Remote State
 
 ```bash
 cd terraform-bootstrap
+
 terraform init
+
 terraform apply
 ```
 
-### 2. Deploy the infrastructure
+---
+
+## 2. Deploy Infrastructure
 
 ```bash
 cd terraform-lab
+
 terraform init
+
 terraform plan
+
 terraform apply
 ```
 
-### 3. Connect using AWS Systems Manager
+---
+
+## 3. Connect Through AWS Systems Manager
 
 ```bash
 chmod +x ssm_bastion.sh ssm_web.sh
 
 ./ssm_bastion.sh
+
 # or
+
 ./ssm_web.sh
 ```
 
-Both helper scripts automatically read the instance ID from `terraform output` and start an interactive SSM session without requiring SSH keys.
+The helper scripts automatically retrieve the EC2 Instance ID from Terraform outputs and establish an interactive Systems Manager session.
 
-### 4. Destroy the infrastructure
+No SSH keys are required.
+
+---
+
+## 4. Destroy Infrastructure
 
 ```bash
 terraform destroy
@@ -120,31 +193,60 @@ terraform destroy
 
 ---
 
-## Quality gates
+# CI/CD & Security Validation
 
-Every push and pull request runs:
+Every push and pull request automatically executes:
 
-- `terraform fmt`
-- `terraform validate`
-- Checkov
-
-### Latest Checkov scan
-
-- ✅ 38 checks passed
-- ⚠️ 2 checks intentionally left unresolved (`CKV_AWS_126`) because EC2 Detailed Monitoring is a cost optimization rather than a security requirement
+- ✅ Terraform Formatting
+- ✅ Terraform Validation
+- ✅ Checkov Terraform Scan
+- ✅ Checkov GitHub Actions Scan
 
 ---
 
-## Known gaps / future improvements
+## GitHub Actions Scan
 
-- [ ] Wire `bastion.sh` and `webserver.sh` into their respective `user_data` blocks (currently only `common.sh` is used)
-- [ ] Add a variable to switch between the managed NAT Gateway and the v1 bastion-as-NAT architecture for cost comparison
-- [ ] Refactor `network.tf` and `compute.tf` into reusable Terraform modules
-- [ ] Add least-privilege inbound security group rules once application workloads are deployed (security groups are intentionally egress-only today)
-- [ ] Enable VPC Flow Logs and integrate them with the existing Wazuh detection pipeline (currently skipped in `.checkov.yaml` as `CKV2_AWS_11`)
+<p align="center">
+  <img src="assets/github_actions_scan_result.png" width="1000" alt="GitHub Actions Scan">
+</p>
 
 ---
 
-## License
+## Checkov Terraform Scan
 
-MIT
+Current results:
+
+- ✅ 38 Checks Passed
+- ⚠️ 2 Findings Accepted (`CKV_AWS_126`)
+
+The remaining findings relate to **EC2 Detailed Monitoring**, which has been intentionally left disabled because it represents a cost optimization rather than a security requirement.
+
+<p align="center">
+  <img src="assets/checkov_scan_result.png" width="1000" alt="Checkov Scan">
+</p>
+
+---
+
+# Future Improvements
+
+- [ ] Connect `bastion.sh` and `webserver.sh` to `user_data`
+- [ ] Variable to switch between NAT Gateway and Bastion-as-NAT
+- [ ] Convert networking into reusable Terraform modules
+- [ ] Apply least-privilege inbound Security Group rules for deployed workloads
+- [ ] Enable VPC Flow Logs and integrate with the Wazuh Detection Pipeline
+
+---
+
+# Related Projects
+
+| Repository | Description |
+|------------|-------------|
+| **aws-infra-cli** | AWS infrastructure provisioned entirely through the AWS CLI |
+| **terraform-aws-bastion-nat** | Previous Terraform implementation using a Bastion NAT Instance |
+| **aws-cloud-detection-pipeline** | Detection engineering with CloudTrail, VPC Flow Logs, and Wazuh |
+
+---
+
+# License
+
+This project is licensed under the **MIT License**.
