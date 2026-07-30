@@ -1,16 +1,20 @@
-# terraform-aws-vpc-ssm
+# AWS Secure VPC with Terraform
 
-A single-region AWS network—VPC, public/private subnets, a managed NAT Gateway, and a private web server—fully provisioned with Terraform, with remote state and integrated GitHub Actions CI.
+#### A single-region AWS network—VPC, public/private subnets, a managed NAT Gateway, and a private web server—fully provisioned with Terraform, with remote state and integrated GitHub Actions CI.
 
-This project is the second iteration of a lab that began as a hand-built AWS CLI environment ([aws-infra-cli](https://github.com/shaurya-security/aws-infra-cli)). It then evolved into a Terraform deployment using a bastion-as-NAT instance ([terraform-aws-bastion-nat](https://github.com/shaurya-security/terraform-aws-bastion-nat/tree/v1.0.0)). This version replaces the bastion-as-NAT pattern with a managed NAT Gateway and replaces SSH administration with AWS Systems Manager Session Manager—no SSH keys or inbound SSH access required.
-
-Although the environment still includes a bastion EC2 instance, it is no longer used for NAT or SSH access. It serves only as an SSM-managed administration host and demonstration instance.
+- This project is the second iteration of a lab that began as a hand-built AWS CLI environment ([aws-infra-cli](https://github.com/shaurya-security/aws-infra-cli)).
+  
+- It then evolved into a Terraform deployment using a bastion-as-NAT instance ([terraform-aws-bastion-nat](https://github.com/shaurya-security/terraform-aws-bastion-nat/tree/v1.0.0)).
+  
+- This version replaces the bastion-as-NAT pattern with a managed NAT Gateway and replaces SSH administration with AWS Systems Manager Session Manager—no SSH keys or inbound SSH access required.
+  
+> **Note:** Although the environment still includes a bastion EC2 instance, it is no longer used for NAT or SSH access. It serves only as an SSM-managed administration host and demonstration instance.
 
 ---
 
 ## What changed from v1
 
-| | v1 (`terraform-aws-bastion-nat`) | v2 (`terraform-aws-vpc-ssm`) |
+| | v1 (`terraform-aws-bastion-nat`) | v2 (`aws-secure-vpc-with-terraform`) |
 |---|---|---|
 | Outbound NAT | Bastion EC2 using `iptables MASQUERADE` | Managed `aws_nat_gateway` |
 | Instance access | SSH jump host (`bastion_ssh.sh` / `web_ssh.sh`) | AWS Systems Manager Session Manager (`ssm_bastion.sh` / `ssm_web.sh`) |
