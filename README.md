@@ -48,12 +48,12 @@ Unlike previous versions, this implementation eliminates SSH administration enti
 | NAT | Bastion EC2 (`iptables`) | Managed NAT Gateway |
 | Administration | SSH Jump Host | AWS Systems Manager |
 | State | Local | S3 Backend |
-| Locking | None | Native `use_lockfile` |
+| Locking | — | Native `use_lockfile` |
 | Security | SSH Inbound | No Inbound Rules |
 | Root Volume | Default | Encrypted |
 | IMDS | Optional | IMDSv2 Required |
-| CI/CD | None | GitHub Actions |
-| Security Scanning | None | Checkov |
+| CI/CD | — | GitHub Actions |
+| Security Scanning | — | Checkov |
 
 ---
 
