@@ -1,6 +1,23 @@
-# AWS Secure VPC with Terraform
+<p align="center">
+  <img src="assets/banner_secure_tf_vpc.png" alt="AWS Secure VPC with Terraform" width="100%">
+</p>
 
-#### A production-style AWS networking lab built with Terraform featuring remote state, a managed NAT Gateway, AWS Systems Manager (SSM), GitHub Actions CI, and Checkov security scanning.
+<h1 align="center">AWS Secure VPC with Terraform</h1>
+
+<p align="center">
+A production-style AWS networking lab demonstrating Infrastructure as Code with Terraform, featuring a secure VPC, managed NAT Gateway, AWS Systems Manager (SSM), remote state, GitHub Actions CI, and automated security validation with Checkov.
+</p>
+
+<p align="center">
+
+  <img src="https://img.shields.io/badge/Terraform-IaC-7B42BC?logo=terraform">
+  <img src="https://img.shields.io/badge/AWS-VPC-FF9900?logo=amazonaws">
+  <img src="https://img.shields.io/badge/AWS-Systems_Manager-FF9900">
+  <img src="https://img.shields.io/badge/GitHub-Actions-2088FF?logo=githubactions">
+  <img src="https://img.shields.io/badge/Checkov-Security-00BFA5">
+  <img src="https://img.shields.io/badge/CI-CD-success">
+
+</p>
 
 ---
 
