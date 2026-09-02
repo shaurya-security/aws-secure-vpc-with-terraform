@@ -126,6 +126,7 @@ Unlike previous versions, this implementation eliminates SSH administration enti
 │   ├── backend.tf
 │   ├── provider.tf
 │   └── s3.tf
+│   └── variables.tf
 │
 └── terraform-lab/
     ├── backend.tf
