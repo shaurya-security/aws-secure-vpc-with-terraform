@@ -158,7 +158,19 @@ Unlike previous versions, this implementation eliminates SSH administration enti
 
 ---
 
-## 1. Bootstrap Remote State
+## 1. Configure Variables
+
+Update the default resource and bucket names in `variables.tf` across both the bootstrap and lab directories to ensure unique S3 bucket names.
+
+```
+# Update S3 bucket names and identifiers in terraform-bootstrap/variables.tf
+nano terraform-bootstrap/variables.tf
+
+# Update corresponding variables in terraform-lab/variables.tf
+nano terraform-lab/variables.tf
+```
+---
+## 2. Bootstrap Remote State
 
 ```bash
 cd terraform-bootstrap
@@ -170,7 +182,7 @@ terraform apply
 
 ---
 
-## 2. Deploy Infrastructure
+## 3. Deploy Infrastructure
 
 ```bash
 cd terraform-lab
@@ -184,7 +196,7 @@ terraform apply
 
 ---
 
-## 3. Connect Through AWS Systems Manager
+## 4. Connect Through AWS Systems Manager
 
 ```bash
 chmod +x ssm_bastion.sh ssm_web.sh
@@ -202,7 +214,7 @@ No SSH keys are required.
 
 ---
 
-## 4. Destroy Infrastructure
+## 5. Destroy Infrastructure
 
 ```bash
 terraform destroy
